@@ -32,15 +32,20 @@ app.post('/webhooks/router', async (req, res) => {
             return res.status(400).send('Número de telefone não encontrado no payload');
         }
 
-        // Defina os destinos com base no número
-        const destinos = {
-            '+55 19 3461-1720': {
-                url: 'https://chat.jcmmetais.com.br/webhooks/whatsapp/+551934611720',
-            },
-            '+55 19 9974-1871': {
-                url: 'https://chat.jcmmetais.com.br/webhooks/whatsapp/+551999741871',
-            },
-        };
+        // Carrega destinos da variável de ambiente
+        const destinos = {};
+        const destinoHost = process.env.DESTINATION_HOST || '';
+        
+        if (process.env.PHONE_ROUTES) {
+            const routes = process.env.PHONE_ROUTES.split('|');
+            routes.forEach(route => {
+                const [phone, path] = route.split('::');
+                if (phone && path) {
+                    const url = path.startsWith('http') ? path : `${destinoHost}${path}`;
+                    destinos[phone.trim()] = { url };
+                }
+            });
+        }
 
         const destino = destinos[phoneNumber];
 

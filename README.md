@@ -28,12 +28,15 @@ Create a `.env` file or set the following environment variables:
 ```env
 AUTHORIZED_TOKENS=token1,token2,token3
 DESTINATION_HOST=https://your-domain.com
-PHONE_ROUTES=+55 19 3461-1720::/webhooks/whatsapp/+551934611720|+55 19 9974-1871::/webhooks/whatsapp/+551999741871
+PHONE_ROUTES=+55 19 3461-1720::/webhooks/whatsapp/+551934611720::secret_token|+55 19 9974-1871::/webhooks/whatsapp/+551999741871
 ```
 
 - `AUTHORIZED_TOKENS`: Comma-separated list of tokens authorized for webhook verification
 - `DESTINATION_HOST`: Base URL for destination endpoints (optional if using full URLs in routes)
-- `PHONE_ROUTES`: Phone number to path/URL mappings. Format: `phone::path|phone::path` (paths will be appended to DESTINATION_HOST, or use full URLs)
+- `PHONE_ROUTES`: Phone number to path/URL mappings.
+  - Format: `phone::path|phone::path::token`
+  - Token is optional - if provided, adds `Authorization: Bearer {token}` header
+  - Paths will be appended to DESTINATION_HOST, or use full URLs starting with http/https
 
 ## Usage
 
@@ -74,7 +77,7 @@ docker build -t wa-webhook-router .
 docker run -p 3000:3000 \
   -e AUTHORIZED_TOKENS=token1,token2,token3 \
   -e DESTINATION_HOST=https://your-domain.com \
-  -e PHONE_ROUTES="+55 19 3461-1720::/webhooks/whatsapp/+551934611720|+55 19 9974-1871::/webhooks/whatsapp/+551999741871" \
+  -e PHONE_ROUTES="+55 19 3461-1720::/webhooks/whatsapp/+551934611720::secret_token|+55 19 9974-1871::/webhooks/whatsapp/+551999741871" \
   wa-webhook-router
 ```
 

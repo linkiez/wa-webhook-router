@@ -5,7 +5,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Stage 2: Runtime
 FROM gcr.io/distroless/nodejs24-debian12:nonroot

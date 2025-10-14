@@ -1,6 +1,6 @@
-import 'dotenv/config';
-import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand, Message } from '@aws-sdk/client-sqs';
+import { DeleteMessageCommand, Message, ReceiveMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import axios from 'axios';
+import 'dotenv/config';
 
 const sqsClient = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const QUEUE_URL = process.env.QUEUE_URL;

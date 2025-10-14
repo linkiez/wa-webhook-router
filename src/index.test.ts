@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { beforeEach, describe, expect, it } from '@jest/globals';
 
 describe('SQS Consumer', () => {
     const mockQueueUrl = 'https://sqs.us-east-1.amazonaws.com/123456789012/test-queue';

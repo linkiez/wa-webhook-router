@@ -1,0 +1,30 @@
+# Build artifacts
+dist/
+node_modules/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.credentials
+
+# Testing
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*

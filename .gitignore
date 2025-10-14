@@ -1,10 +1,5 @@
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
-
+.yarn
+dist
 # Whether you use PnP or not, the node_modules folder is often used to store
 # build artifacts that should be gitignored
 node_modules
@@ -17,3 +12,7 @@ node_modules
 .pnp.*
 
 .env
+.env.local
+.env.*.local
+.env.credentials
+

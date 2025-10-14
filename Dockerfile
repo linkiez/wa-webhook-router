@@ -1,21 +1,35 @@
-# Stage 1: Build
-FROM node:24-slim AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
+# Copy package files
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
 
-RUN npm install --only=production
+# Install dependencies
+RUN yarn install --immutable
 
-# Stage 2: Runtime
+# Copy source code
+COPY tsconfig.json ./
+COPY src ./src
+
+# Build TypeScript
+RUN yarn build
+
+# Production stage
 FROM gcr.io/distroless/nodejs24-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY index.mjs ./
-COPY package.json ./
+# Copy package files
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
 
-EXPOSE 3000
+# Install production dependencies only
+RUN yarn workspaces focus --production && yarn cache clean
 
-CMD ["index.mjs"]
+# Copy built application
+COPY --from=builder /app/dist ./dist
+
+# Start the application
+CMD ["dist/index.js"]

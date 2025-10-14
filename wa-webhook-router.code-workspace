@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "wa-webhook-router",
+			"path": "."
+		},
+		{
+			"name": "wa-webhook-lambda-to-queue",
+			"path": "../wa-webhook-lambda-to-queue"
+		}
+	],
+	"settings": {}
+}

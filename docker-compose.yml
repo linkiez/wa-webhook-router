@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   wa-webhook-router:
     build: .
@@ -9,16 +7,16 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      
+  
       # SQS Configuration
       - QUEUE_URL=${QUEUE_URL}
-      
+
       # Routing Configuration
       - DESTINATION_HOST=${DESTINATION_HOST}
       - PHONE_ROUTES=${PHONE_ROUTES}
-    
+
     restart: unless-stopped
-    
+
     # Resource limits
     deploy:
       resources:
@@ -28,14 +26,14 @@ services:
         reservations:
           cpus: '0.25'
           memory: 256M
-    
+
     # Logging
     logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    
+        driver: "fluentd"
+        options:
+            fluentd-address: "localhost:24224"  # Update with your Fluentd host & port
+            tag: "wa-webhook-router"
+
     # Health check (optional - checks if process is running)
     healthcheck:
       test: ["CMD", "pgrep", "-f", "node"]

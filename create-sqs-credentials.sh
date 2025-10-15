@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 USER_NAME="${IAM_USER_NAME:-sqs-consumer-user}"
-QUEUE_NAME="${QUEUE_NAME:-Chatwoot-Meta-Queue}"
+QUEUE_NAME="${QUEUE_NAME:-Chatwoot-Meta-Queue.fifo}"
 REGION="${AWS_REGION:-us-east-1}"
 POLICY_NAME="${USER_NAME}-sqs-readonly-policy"
 

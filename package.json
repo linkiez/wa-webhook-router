@@ -1,7 +1,6 @@
 {
   "name": "wa-webhook-router",
   "type": "module",
-  "packageManager": "yarn@4.9.2",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

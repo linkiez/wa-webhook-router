@@ -7,7 +7,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-  
+
       # SQS Configuration
       - QUEUE_URL=${QUEUE_URL}
 
@@ -15,7 +15,10 @@ services:
       - DESTINATION_HOST=${DESTINATION_HOST}
       - PHONE_ROUTES=${PHONE_ROUTES}
 
-    restart: unless-stopped
+      # WhatsApp API Token for downloading media
+      - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN}
+
+    restart: always
 
     # Resource limits
     deploy:
@@ -31,12 +34,15 @@ services:
     logging:
         driver: "fluentd"
         options:
-            fluentd-address: "localhost:24224"  # Update with your Fluentd host & port
+            fluentd-address: "localhost:24224"
             tag: "wa-webhook-router"
+            fluentd-async: "true"
+            fluentd-retry-wait: "1s"
+            fluentd-max-retries: "3"
 
-    # Health check (optional - checks if process is running)
+    # Health check - checks if node process is running
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "node"]
+      test: ["CMD", "/nodejs/bin/node", "-e", "try{process.kill(1,0);process.exit(0)}catch(e){process.exit(1)}"]
       interval: 30s
       timeout: 10s
       retries: 3

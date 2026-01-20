@@ -1,11 +1,25 @@
 import { DeleteMessageCommand, Message, ReceiveMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { Storage } from '@google-cloud/storage';
 import axios from 'axios';
 import 'dotenv/config';
-import FormData from 'form-data';
 
 const sqsClient = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const QUEUE_URL = process.env.QUEUE_URL;
 const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN || '';
+
+// Google Cloud Storage configuration
+const GCS_BUCKET = process.env.GCS_BUCKET || 'chatwoot-whatsapp-media';
+const GCS_CREDENTIALS_PATH = process.env.GCS_CREDENTIALS_PATH || '/app/gcs-credentials.json';
+let storage: Storage | null = null;
+
+// Initialize GCS only if credentials exist
+try {
+    storage = new Storage({ keyFilename: GCS_CREDENTIALS_PATH });
+    console.log('[GCS] Initialized with bucket:', GCS_BUCKET);
+} catch (error) {
+    console.log('[GCS] WARNING: Failed to initialize Google Cloud Storage:', error instanceof Error ? error.message : 'Unknown error');
+    console.log('[GCS] Documents will be sent without modification');
+}
 
 interface RouteConfig {
     url: string;
@@ -123,6 +137,49 @@ const downloadWhatsAppMedia = async (mediaId: string): Promise<Buffer | null> =>
     }
 };
 
+// Upload file to Google Cloud Storage and return public URL
+const uploadToGCS = async (fileBuffer: Buffer, filename: string, mimeType: string): Promise<string | null> => {
+    try {
+        if (!storage) {
+            console.log('[GCS Upload] ERROR: Storage not initialized');
+            return null;
+        }
+
+        const bucket = storage.bucket(GCS_BUCKET);
+        
+        // Generate unique filename with timestamp
+        const timestamp = Date.now();
+        const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const gcsFilename = `whatsapp-documents/${timestamp}-${sanitizedFilename}`;
+        
+        const file = bucket.file(gcsFilename);
+        
+        console.log('[GCS Upload] Uploading to:', gcsFilename);
+        
+        // Upload file
+        await file.save(fileBuffer, {
+            metadata: {
+                contentType: mimeType,
+                metadata: {
+                    source: 'whatsapp-webhook-router',
+                    originalFilename: filename
+                }
+            },
+            public: true, // Make file publicly accessible
+        });
+        
+        // Get public URL
+        const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET}/${gcsFilename}`;
+        
+        console.log('[GCS Upload] Successfully uploaded, URL:', publicUrl);
+        return publicUrl;
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[GCS Upload] ERROR: Failed to upload file:', errorMessage);
+        return null;
+    }
+};
+
 const processMessage = async (message: Message, routes: Record<string, RouteConfig>): Promise<boolean> => {
     try {
         if (!message.Body) {
@@ -163,28 +220,45 @@ const processMessage = async (message: Message, routes: Record<string, RouteConf
             // Download the document
             const fileBuffer = await downloadWhatsAppMedia(doc.id);
 
-            if (fileBuffer) {
-                // Send as multipart/form-data with the file attached
-                const formData = new FormData();
-                formData.append('file', fileBuffer, {
-                    filename: doc.filename,
-                    contentType: doc.mime_type
-                });
-                formData.append('payload', JSON.stringify(payload));
-
-                const headers: Record<string, string> = {
-                    ...formData.getHeaders()
-                };
-
-                if (destino.token) {
-                    headers['Authorization'] = `Bearer ${destino.token}`;
+            if (fileBuffer && storage) {
+                // Upload to Google Cloud Storage
+                const gcsUrl = await uploadToGCS(fileBuffer, doc.filename, doc.mime_type);
+                
+                if (gcsUrl) {
+                    // Modify webhook payload to replace WhatsApp URL with GCS URL
+                    const modifiedPayload = JSON.parse(JSON.stringify(payload)); // Deep clone
+                    if (modifiedPayload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.document) {
+                        modifiedPayload.entry[0].changes[0].value.messages[0].document.url = gcsUrl;
+                        console.log('[SQS Consumer] Replaced document URL with GCS URL:', gcsUrl);
+                    }
+                    
+                    // Send modified webhook with GCS URL
+                    const headers: Record<string, string> = {
+                        'Content-Type': 'application/json',
+                    };
+                    
+                    if (destino.token) {
+                        headers['Authorization'] = `Bearer ${destino.token}`;
+                    }
+                    
+                    console.log('[SQS Consumer] Forwarding with GCS document URL');
+                    await axios.post(destino.url, modifiedPayload, { headers });
+                } else {
+                    // GCS upload failed, send original webhook
+                    console.log('[SQS Consumer] WARNING: Failed to upload to GCS, sending original webhook');
+                    const headers: Record<string, string> = {
+                        'Content-Type': 'application/json',
+                    };
+                    
+                    if (destino.token) {
+                        headers['Authorization'] = `Bearer ${destino.token}`;
+                    }
+                    
+                    await axios.post(destino.url, payload, { headers });
                 }
-
-                console.log('[SQS Consumer] Forwarding with document attachment:', doc.filename);
-                await axios.post(destino.url, formData, { headers });
             } else {
-                // Fallback: send without file if download failed
-                console.log('[SQS Consumer] WARNING: Failed to download document, sending webhook without file');
+                // Download failed or GCS not configured, send original webhook
+                console.log('[SQS Consumer] WARNING: Failed to download document or GCS not configured, sending original webhook');
                 const headers: Record<string, string> = {
                     'Content-Type': 'application/json',
                 };

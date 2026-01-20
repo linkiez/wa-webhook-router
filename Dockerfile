@@ -2,37 +2,29 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Enable Corepack for Yarn 4
-RUN corepack enable
-
 # Copy package files
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn ./.yarn
+COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN yarn install --immutable
+RUN npm ci
 
 # Copy source code
 COPY tsconfig.json ./
 COPY src ./src
 
 # Build TypeScript
-RUN yarn build
+RUN npm run build
 
 # Production dependencies stage
 FROM node:20-alpine AS prod-deps
 
 WORKDIR /app
 
-# Enable Corepack
-RUN corepack enable
-
 # Copy package files
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn ./.yarn
+COPY package.json package-lock.json ./
 
 # Install production dependencies only
-RUN yarn workspaces focus --production && yarn cache clean
+RUN npm ci --only=production
 
 # Final stage - Use Debian base to have procps (pgrep)
 FROM node:20-slim

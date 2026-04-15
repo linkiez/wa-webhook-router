@@ -15,7 +15,7 @@ services:
       - DESTINATION_HOST=${DESTINATION_HOST}
       - PHONE_ROUTES=${PHONE_ROUTES}
 
-    restart: unless-stopped
+    restart: on-failure
 
     # Resource limits
     deploy:
@@ -34,9 +34,15 @@ services:
             fluentd-address: "localhost:24224"  # Update with your Fluentd host & port
             tag: "wa-webhook-router"
 
-    # Health check (optional - checks if process is running)
+    # Health check compatible with the distroless Node runtime
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "node"]
+      test:
+        [
+          "CMD",
+          "/nodejs/bin/node",
+          "-e",
+          "const fs=require('fs'); const cmdline=fs.readFileSync('/proc/1/cmdline','utf8'); process.exit(cmdline.includes('dist/index.js') ? 0 : 1);"
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

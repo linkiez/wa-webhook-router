@@ -1,4 +1,11 @@
-.yarn
+# Yarn - Keep plugins and releases, ignore cache and install state
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
 dist
 # Whether you use PnP or not, the node_modules folder is often used to store
 # build artifacts that should be gitignored
@@ -15,4 +22,4 @@ node_modules
 .env.local
 .env.*.local
 .env.credentials
-
+gcs-credentials.json

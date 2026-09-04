@@ -2,6 +2,19 @@ import { DeleteMessageCommand, Message, ReceiveMessageCommand, SQSClient } from 
 import axios from 'axios';
 import 'dotenv/config';
 
+type LogFields = Record<string, unknown>;
+
+// Structured single-line JSON logs, easy to parse/filter in log aggregators (Fluentd).
+const log = (level: 'info' | 'warn' | 'error', message: string, fields: LogFields = {}): void => {
+    const line = JSON.stringify({ timestamp: new Date().toISOString(), level, message, ...fields });
+    (level === 'error' ? console.error : console.log)(line);
+};
+
+const errorFields = (error: unknown): LogFields => ({
+    error: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined,
+});
+
 const sqsClient = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const QUEUE_URL = process.env.QUEUE_URL;
 
@@ -64,7 +77,7 @@ const extractPhoneNumbers = (payload: MetaWebhookPayload): string[] => {
 };
 
 const forwardToDestino = async (destino: RouteConfig, payload: MetaWebhookPayload): Promise<void> => {
-    console.log('[SQS Consumer] Forwarding to:', destino.url);
+    log('info', 'Forwarding message', { url: destino.url });
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -92,29 +105,31 @@ const collectDestinos = (phoneNumbers: string[], routes: Record<string, RouteCon
 };
 
 const processMessage = async (message: Message, routes: Record<string, RouteConfig[]>): Promise<boolean> => {
+    const messageId = message.MessageId;
+
     try {
         if (!message.Body) {
-            console.log('[SQS Consumer] ERROR: Message body is empty');
+            log('error', 'Message body is empty', { messageId });
             return false;
         }
 
         const payload: MetaWebhookPayload = JSON.parse(message.Body);
 
-        console.log('[SQS Consumer] Processing message:', message.MessageId);
+        log('info', 'Processing message', { messageId });
 
         const phoneNumbers = extractPhoneNumbers(payload);
 
         if (phoneNumbers.length === 0) {
-            console.log('[SQS Consumer] ERROR: Phone number not found in payload');
+            log('error', 'Phone number not found in payload', { messageId });
             return false;
         }
 
-        console.log('[SQS Consumer] Phone numbers:', phoneNumbers.join(', '));
+        log('info', 'Phone numbers found', { messageId, phoneNumbers });
 
         const destinos = collectDestinos(phoneNumbers, routes);
 
         if (destinos.length === 0) {
-            console.log('[SQS Consumer] ERROR: No route configured for phones:', phoneNumbers.join(', '));
+            log('error', 'No route configured for phones', { messageId, phoneNumbers });
             return false;
         }
 
@@ -122,8 +137,7 @@ const processMessage = async (message: Message, routes: Record<string, RouteConf
 
         results.forEach((result, index) => {
             if (result.status === 'rejected') {
-                const errorMessage = result.reason instanceof Error ? result.reason.message : 'Unknown error';
-                console.error(`[SQS Consumer] ERROR: Failed to forward to ${destinos[index].url}:`, errorMessage);
+                log('error', 'Failed to forward to destination', { messageId, url: destinos[index].url, ...errorFields(result.reason) });
             }
         });
 
@@ -132,31 +146,27 @@ const processMessage = async (message: Message, routes: Record<string, RouteConf
         const delivered = results.some(result => result.status === 'fulfilled');
 
         if (!delivered) {
-            console.log('[SQS Consumer] ERROR: All destinations failed');
+            log('error', 'All destinations failed', { messageId });
             return false;
         }
 
-        console.log('[SQS Consumer] Successfully forwarded message');
+        log('info', 'Successfully forwarded message', { messageId });
         return true;
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const errorStack = error instanceof Error ? error.stack : '';
-        console.error('[SQS Consumer] ERROR: Failed to process message:', errorMessage);
-        console.error('[SQS Consumer] Stack:', errorStack);
+        log('error', 'Failed to process message', { messageId, ...errorFields(error) });
         return false;
     }
 };
 
-const deleteMessage = async (receiptHandle: string): Promise<void> => {
+const deleteMessage = async (messageId: string | undefined, receiptHandle: string): Promise<void> => {
     try {
         await sqsClient.send(new DeleteMessageCommand({
             QueueUrl: QUEUE_URL,
             ReceiptHandle: receiptHandle
         }));
-        console.log('[SQS Consumer] Message deleted from queue');
+        log('info', 'Message deleted from queue', { messageId });
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('[SQS Consumer] ERROR: Failed to delete message:', errorMessage);
+        log('error', 'Failed to delete message', { messageId, ...errorFields(error) });
     }
 };
 
@@ -171,17 +181,16 @@ const pollOnce = async (routes: Record<string, RouteConfig[]>): Promise<void> =>
     const response = await sqsClient.send(command);
 
     if (!response.Messages || response.Messages.length === 0) {
-        console.log('[SQS Consumer] No messages received');
         return;
     }
 
-    console.log(`[SQS Consumer] Received ${response.Messages.length} message(s)`);
+    log('info', 'Received messages', { count: response.Messages.length });
 
     for (const message of response.Messages) {
         const success = await processMessage(message, routes);
 
         if (success && message.ReceiptHandle) {
-            await deleteMessage(message.ReceiptHandle);
+            await deleteMessage(message.MessageId, message.ReceiptHandle);
         }
     }
 };
@@ -189,17 +198,13 @@ const pollOnce = async (routes: Record<string, RouteConfig[]>): Promise<void> =>
 const pollQueue = async (): Promise<void> => {
     const routes = loadRoutes();
 
-    console.log('[SQS Consumer] Polling queue:', QUEUE_URL);
-    console.log('[SQS Consumer] Available routes:', Object.keys(routes));
+    log('info', 'Polling queue', { queueUrl: QUEUE_URL, phones: Object.keys(routes) });
 
     while (true) {
         try {
             await pollOnce(routes);
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            const errorStack = error instanceof Error ? error.stack : '';
-            console.error('[SQS Consumer] ERROR: Failed to poll queue:', errorMessage);
-            console.error('[SQS Consumer] Stack:', errorStack);
+            log('error', 'Failed to poll queue', errorFields(error));
 
             // Wait before retrying on error
             await new Promise(resolve => setTimeout(resolve, 5000));
@@ -209,18 +214,15 @@ const pollQueue = async (): Promise<void> => {
 
 // Validate configuration
 if (!QUEUE_URL) {
-    console.error('[SQS Consumer] FATAL: QUEUE_URL environment variable is required');
+    log('error', 'QUEUE_URL environment variable is required');
     process.exit(1);
 }
 
-console.log('[SQS Consumer] Starting...');
-console.log('[SQS Consumer] Queue URL:', QUEUE_URL);
-console.log('[SQS Consumer] AWS Region:', process.env.AWS_REGION || 'us-east-1');
+log('info', 'Starting SQS consumer', { queueUrl: QUEUE_URL, awsRegion: process.env.AWS_REGION || 'us-east-1' });
 
 try {
     await pollQueue();
 } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[SQS Consumer] FATAL ERROR:', errorMessage);
+    log('error', 'Fatal error', errorFields(error));
     process.exit(1);
 }

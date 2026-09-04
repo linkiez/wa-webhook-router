@@ -130,7 +130,6 @@ AWS_REGION=$REGION
 QUEUE_URL=$QUEUE_URL
 
 # Add your routing configuration below
-# DESTINATION_HOST=http://localhost:3001
 # PHONE_ROUTES=5511999999999::/webhooks/meta|5511888888888::/webhooks/whatsapp
 EOF
 
@@ -148,7 +147,7 @@ echo "Credentials saved to: .env.credentials"
 echo ""
 echo "IMPORTANT: Copy .env.credentials to .env and add your routing configuration:"
 echo "  cp .env.credentials .env"
-echo "  nano .env  # Add DESTINATION_HOST and PHONE_ROUTES"
+echo "  nano .env  # Add PHONE_ROUTES"
 echo ""
 echo "For Docker deployment, use these environment variables in your docker-compose.yml"
 echo ""
@@ -169,7 +168,6 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - QUEUE_URL=${QUEUE_URL}
-      - DESTINATION_HOST=http://your-app:3000
       - PHONE_ROUTES=5511999999999::/webhooks/meta
     restart: unless-stopped
 DOCKER

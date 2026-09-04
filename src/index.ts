@@ -22,42 +22,23 @@ interface MetaWebhookPayload {
     }>;
 }
 
-// Build one URL per configured host for a relative path, so a single route
-// entry can fan out to every host in DESTINATION_HOST.
-const buildUrls = (path: string, hosts: string[]): string[] => {
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-        return [path];
-    }
-
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    return hosts.map(host => {
-        const normalizedHost = host.endsWith('/') ? host.slice(0, -1) : host;
-        return `${normalizedHost}${normalizedPath}`;
-    });
-};
-
 // Load routing configuration; multiple destinations per phone are supported
-// by repeating the phone number across PHONE_ROUTES entries, or by listing
-// several comma-separated hosts in DESTINATION_HOST.
+// by repeating the phone number across PHONE_ROUTES entries.
 const loadRoutes = (): Record<string, RouteConfig[]> => {
     const destinos: Record<string, RouteConfig[]> = {};
-    const destinoHosts = (process.env.DESTINATION_HOST || '')
-        .split(',')
-        .map(host => host.trim())
-        .filter(Boolean);
 
     if (process.env.PHONE_ROUTES) {
         const routes = process.env.PHONE_ROUTES.split('|');
         routes.forEach(route => {
             const parts = route.split('::');
             const phone = parts[0];
-            const path = parts[1];
+            const url = parts[1];
             const token = parts[2]?.trim();
 
-            if (phone && path) {
+            if (phone && url) {
                 const key = phone.trim();
-                const novos = buildUrls(path, destinoHosts).map((url): RouteConfig => ({ url, token }));
-                destinos[key] = destinos[key] ? [...destinos[key], ...novos] : novos;
+                const destino: RouteConfig = { url: url.trim(), token };
+                destinos[key] = destinos[key] ? [...destinos[key], destino] : [destino];
             }
         });
     }

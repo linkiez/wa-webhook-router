@@ -12,7 +12,6 @@ services:
       - QUEUE_URL=${QUEUE_URL}
 
       # Routing Configuration
-      - DESTINATION_HOST=${DESTINATION_HOST}
       - PHONE_ROUTES=${PHONE_ROUTES}
 
     restart: on-failure

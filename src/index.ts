@@ -13,6 +13,10 @@ const log = (level: 'info' | 'warn' | 'error', message: string, fields: LogField
 const errorFields = (error: unknown): LogFields => ({
     error: error instanceof Error ? error.message : 'Unknown error',
     stack: error instanceof Error ? error.stack : undefined,
+    // Surface the upstream response so HTTP failures (4xx/5xx) are diagnosable from logs alone.
+    ...(axios.isAxiosError(error) && error.response
+        ? { responseStatus: error.response.status, responseBody: error.response.data }
+        : {}),
 });
 
 const sqsClient = new SQSClient({ region: process.env.AWS_REGION || 'us-east-1' });

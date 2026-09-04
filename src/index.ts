@@ -118,7 +118,23 @@ const processMessage = async (message: Message, routes: Record<string, RouteConf
             return false;
         }
 
-        await Promise.all(destinos.map(destino => forwardToDestino(destino, payload)));
+        const results = await Promise.allSettled(destinos.map(destino => forwardToDestino(destino, payload)));
+
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                const errorMessage = result.reason instanceof Error ? result.reason.message : 'Unknown error';
+                console.error(`[SQS Consumer] ERROR: Failed to forward to ${destinos[index].url}:`, errorMessage);
+            }
+        });
+
+        // At-least-one delivery is enough to consider the message handled;
+        // the fully-failed destinations above are logged for follow-up.
+        const delivered = results.some(result => result.status === 'fulfilled');
+
+        if (!delivered) {
+            console.log('[SQS Consumer] ERROR: All destinations failed');
+            return false;
+        }
 
         console.log('[SQS Consumer] Successfully forwarded message');
         return true;

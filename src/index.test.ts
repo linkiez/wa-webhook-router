@@ -33,6 +33,25 @@ describe('SQS Consumer', () => {
             
             expect(routes).toEqual(['5511999999999', '5511999999999']);
         });
+
+        it('should parse the required flag and optional token', () => {
+            const parse = (route: string) => {
+                const parts = route.split('::').map(p => p.trim());
+                const isRequired = parts.length > 2 && parts.at(-1) === 'required';
+                if (isRequired) parts.pop();
+                return { phone: parts[0], url: parts[1], token: parts[2] || undefined, required: isRequired };
+            };
+
+            expect(parse('5511999999999::https://a.com/hook')).toEqual({
+                phone: '5511999999999', url: 'https://a.com/hook', token: undefined, required: false,
+            });
+            expect(parse('5511999999999::https://a.com/hook::required')).toEqual({
+                phone: '5511999999999', url: 'https://a.com/hook', token: undefined, required: true,
+            });
+            expect(parse('5511999999999::https://a.com/hook::tok::required')).toEqual({
+                phone: '5511999999999', url: 'https://a.com/hook', token: 'tok', required: true,
+            });
+        });
     });
 
     describe('Message Processing', () => {

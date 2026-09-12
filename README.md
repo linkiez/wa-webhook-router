@@ -30,7 +30,7 @@ Create a `.env` file or set the following environment variables:
 ```env
 QUEUE_URL=https://sqs.us-east-1.amazonaws.com/523566111264/Chatwoot-Meta-Queue
 AWS_REGION=us-east-1
-PHONE_ROUTES=5511999999999::http://localhost:3001/webhooks/meta::token123|5511888888888::http://localhost:3001/webhooks/whatsapp
+PHONE_ROUTES=5511999999999::http://localhost:3001/webhooks/meta::token123::required|5511888888888::http://localhost:3001/webhooks/whatsapp
 ```
 
 ### AWS Credentials
@@ -56,8 +56,9 @@ The application uses the AWS SDK which supports multiple authentication methods 
 - `QUEUE_URL`: AWS SQS queue URL (required)
 - `AWS_REGION`: AWS region for SQS client (default: us-east-1)
 - `PHONE_ROUTES`: Phone number to destination URL mappings
-  - Format: `phone::url|phone::url::token`
+  - Format: `phone::url[::token][::required]`
   - Token is optional - if provided, adds `Authorization: Bearer {token}` header
+  - Append `::required` to make a destination mandatory: if it fails, the message stays in queue for retry. Unmarked destinations are best-effort.
   - Repeat the same phone number to forward its messages to multiple destinations
 
 ## Installation

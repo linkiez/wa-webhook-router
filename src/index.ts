@@ -25,6 +25,7 @@ const QUEUE_URL = process.env.QUEUE_URL;
 interface RouteConfig {
     url: string;
     token?: string;
+    required?: boolean;
 }
 
 interface MetaWebhookPayload {
@@ -41,21 +42,26 @@ interface MetaWebhookPayload {
 
 // Load routing configuration; multiple destinations per phone are supported
 // by repeating the phone number across PHONE_ROUTES entries.
+// Format: phone::url[::token][::required]
 const loadRoutes = (): Record<string, RouteConfig[]> => {
     const destinos: Record<string, RouteConfig[]> = {};
 
     if (process.env.PHONE_ROUTES) {
         const routes = process.env.PHONE_ROUTES.split('|');
         routes.forEach(route => {
-            const parts = route.split('::');
+            const parts = route.split('::').map(part => part.trim());
             const phone = parts[0];
             const url = parts[1];
-            const token = parts[2]?.trim();
+            // Literal token "required" is reserved as the mandatory flag.
+            const isRequired = parts.length > 2 && parts.at(-1) === 'required';
+            if (isRequired) {
+                parts.pop();
+            }
+            const token = parts[2] || undefined;
 
             if (phone && url) {
-                const key = phone.trim();
-                const destino: RouteConfig = { url: url.trim(), token };
-                destinos[key] = destinos[key] ? [...destinos[key], destino] : [destino];
+                const destino: RouteConfig = { url, token, required: isRequired };
+                destinos[phone] = destinos[phone] ? [...destinos[phone], destino] : [destino];
             }
         });
     }
@@ -141,16 +147,25 @@ const processMessage = async (message: Message, routes: Record<string, RouteConf
 
         results.forEach((result, index) => {
             if (result.status === 'rejected') {
-                log('error', 'Failed to forward to destination', { messageId, url: destinos[index].url, ...errorFields(result.reason) });
+                log('error', 'Failed to forward to destination', {
+                    messageId,
+                    url: destinos[index].url,
+                    required: destinos[index].required === true,
+                    ...errorFields(result.reason),
+                });
             }
         });
 
-        // At-least-one delivery is enough to consider the message handled;
-        // the fully-failed destinations above are logged for follow-up.
-        const delivered = results.some(result => result.status === 'fulfilled');
+        // Success requires: at least one destination delivered AND no
+        // `required` destination failed. A failed required destination keeps the
+        // message in the queue for retry.
+        const requiredFailed = results.some(
+            (result, index) => result.status === 'rejected' && destinos[index].required === true
+        );
+        const delivered = results.some(result => result.status === 'fulfilled') && !requiredFailed;
 
         if (!delivered) {
-            log('error', 'All destinations failed', { messageId });
+            log('error', requiredFailed ? 'Required destination failed' : 'All destinations failed', { messageId });
             return false;
         }
 
